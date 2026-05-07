@@ -40,9 +40,7 @@ def preprocess_and_train(min_date: str = "2009-01-01", max_date: str = "2015-01-
     )
     data_query_cache_path.parent.mkdir(parents=True, exist_ok=True)
 
-    data_query_cached_exists = data_query_cache_path.is_file()
-
-    if data_query_cached_exists:
+    if data_query_cache_path.is_file():
         print("Loading data from local CSV...")
 
         data = pd.read_csv(
@@ -223,6 +221,91 @@ def preprocess(min_date: str = "2009-01-01", max_date: str = "2015-01-01") -> No
     print(f"✅ preprocess() done: {len(processed_data)} rows saved to {data_processed_path}")
 
 
+def train(min_date: str = "2009-01-01", max_date: str = "2015-01-01") -> None:
+    """
+    - Load preprocessed data from local CSV
+    - Read it chunk by chunk
+    - Initialize model only once
+    - Train incrementally on each chunk
+    - Save final model and validation metrics
+    """
+
+    print(Fore.MAGENTA + "\n ⭐️ Use case: train by chunks" + Style.RESET_ALL)
+
+    min_date = parse(min_date).strftime("%Y-%m-%d")
+    max_date = parse(max_date).strftime("%Y-%m-%d")
+
+    data_processed_path = Path(LOCAL_DATA_PATH).joinpath(
+        "processed", f"processed_{min_date}_{max_date}_{DATA_SIZE}.csv"
+    )
+
+    if not data_processed_path.is_file():
+        raise FileNotFoundError(
+            f"Processed data not found at {data_processed_path}. "
+            "Run preprocess() first."
+        )
+
+    learning_rate = 0.0005
+    batch_size = 256
+    patience = 2
+    split_ratio = 0.1
+
+    model = None
+    metrics_val_list = []
+
+    data_processed_chunks = pd.read_csv(
+        data_processed_path,
+        chunksize=CHUNK_SIZE,
+        header=None,
+        dtype=DTYPES_PROCESSED,
+    )
+
+    for chunk_id, data_processed_chunk in enumerate(data_processed_chunks):
+        print(f"Training on preprocessed chunk {chunk_id}...")
+
+        train_length = int(len(data_processed_chunk) * (1 - split_ratio))
+
+        data_train = data_processed_chunk.iloc[:train_length, :].sample(frac=1).to_numpy()
+        data_val = data_processed_chunk.iloc[train_length:, :].sample(frac=1).to_numpy()
+
+        X_train = data_train[:, :-1]
+        y_train = data_train[:, -1]
+
+        X_val = data_val[:, :-1]
+        y_val = data_val[:, -1]
+
+        if model is None:
+            model = initialize_model(input_shape=X_train.shape[1:])
+            model = compile_model(model, learning_rate=learning_rate)
+
+        model, history = train_model(
+            model=model,
+            X=X_train,
+            y=y_train,
+            batch_size=batch_size,
+            patience=patience,
+            validation_data=(X_val, y_val),
+        )
+
+        val_mae = np.min(history.history["val_mae"])
+        metrics_val_list.append(val_mae)
+
+    final_val_mae = metrics_val_list[-1]
+
+    params = dict(
+        learning_rate=learning_rate,
+        batch_size=batch_size,
+        patience=patience,
+        incremental=True,
+        chunk_size=CHUNK_SIZE,
+    )
+
+    save_results(params=params, metrics=dict(mae=final_val_mae))
+    save_model(model=model)
+
+    print(f"✅ train() done with MAE: {round(final_val_mae, 2)}")
+
+
 def pred(X_pred: pd.DataFrame = None) -> np.ndarray:
     print(Fore.MAGENTA + "\n ⭐️ Use case: pred" + Style.RESET_ALL)
 
@@ -249,9 +332,8 @@ def pred(X_pred: pd.DataFrame = None) -> np.ndarray:
 
 if __name__ == "__main__":
     try:
-        preprocess()
-        # preprocess_and_train()
-        # pred()
+        train()
+        pred()
     except:
         import sys
         import traceback

@@ -6,15 +6,16 @@ import pygeohash as gh
 
 def transform_time_features(X: pd.DataFrame) -> pd.DataFrame:
     """
-    Extract cyclical hour features from pickup_datetime.
+    Extract time features from pickup_datetime.
     """
 
     pickup_datetime = pd.to_datetime(X["pickup_datetime"], utc=True)
-    hour = pickup_datetime.dt.hour
 
     time_features = pd.DataFrame(index=X.index)
-    time_features["pickup_hour_sin"] = np.sin(2 * np.pi * hour / 24)
-    time_features["pickup_hour_cos"] = np.cos(2 * np.pi * hour / 24)
+    time_features["pickup_hour"] = pickup_datetime.dt.hour
+    time_features["pickup_day_of_week"] = pickup_datetime.dt.dayofweek
+    time_features["pickup_month"] = pickup_datetime.dt.month
+    time_features["pickup_year"] = pickup_datetime.dt.year
 
     return time_features
 
@@ -50,7 +51,7 @@ def haversine_vectorized(
 
 def transform_lonlat_features(X: pd.DataFrame) -> pd.DataFrame:
     """
-    Transform longitude/latitude columns into distance feature.
+    Transform longitude/latitude columns into a distance feature.
     """
 
     lonlat_features = pd.DataFrame(index=X.index)
@@ -65,14 +66,14 @@ def transform_lonlat_features(X: pd.DataFrame) -> pd.DataFrame:
     return lonlat_features
 
 
-def compute_geohash(X: pd.DataFrame, precision: int = 5) -> pd.DataFrame:
+def compute_geohash(X: pd.DataFrame, precision: int = 4) -> pd.DataFrame:
     """
-    Compute a pickup-dropoff geohash pair as one categorical route feature.
+    Compute pickup and dropoff geohashes.
     """
 
-    X = X.copy()
+    geohash_features = pd.DataFrame(index=X.index)
 
-    pickup_geohash = X.apply(
+    geohash_features["pickup_geohash"] = X.apply(
         lambda row: gh.encode(
             row["pickup_latitude"],
             row["pickup_longitude"],
@@ -81,7 +82,7 @@ def compute_geohash(X: pd.DataFrame, precision: int = 5) -> pd.DataFrame:
         axis=1,
     )
 
-    dropoff_geohash = X.apply(
+    geohash_features["dropoff_geohash"] = X.apply(
         lambda row: gh.encode(
             row["dropoff_latitude"],
             row["dropoff_longitude"],
@@ -89,8 +90,5 @@ def compute_geohash(X: pd.DataFrame, precision: int = 5) -> pd.DataFrame:
         ),
         axis=1,
     )
-
-    geohash_features = pd.DataFrame(index=X.index)
-    geohash_features["geohash_pair"] = pickup_geohash + "_" + dropoff_geohash
 
     return geohash_features

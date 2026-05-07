@@ -81,6 +81,7 @@ def preprocess_and_train(min_date: str = "2009-01-01", max_date: str = "2015-01-
     y_val = data_val[["fare_amount"]]
 
     X_processed = preprocess_features(pd.concat([X_train, X_val], axis=0))
+
     X_train_processed = X_processed[: len(X_train)]
     X_val_processed = X_processed[len(X_train):]
 
@@ -114,6 +115,114 @@ def preprocess_and_train(min_date: str = "2009-01-01", max_date: str = "2015-01-
     print("✅ preprocess_and_train() done")
 
 
+def preprocess(min_date: str = "2009-01-01", max_date: str = "2015-01-01") -> None:
+    """
+    - Query the raw dataset from Le Wagon's BigQuery dataset or load local raw CSV
+    - Save raw query result locally
+    - Clean raw data
+    - Preprocess cleaned data
+    - Save processed data locally as a CSV
+    """
+
+    print(Fore.MAGENTA + "\n ⭐️ Use case: preprocess by chunks" + Style.RESET_ALL)
+
+    min_date = parse(min_date).strftime("%Y-%m-%d")
+    max_date = parse(max_date).strftime("%Y-%m-%d")
+
+    query = f"""
+        SELECT {",".join(COLUMN_NAMES_RAW)}
+        FROM `{GCP_PROJECT_WAGON}.{BQ_DATASET}.raw_{DATA_SIZE}`
+        WHERE pickup_datetime BETWEEN '{min_date}' AND '{max_date}'
+        ORDER BY pickup_datetime
+        """
+
+    data_query_cache_path = Path(LOCAL_DATA_PATH).joinpath(
+        "raw", f"query_{min_date}_{max_date}_{DATA_SIZE}.csv"
+    )
+
+    data_processed_path = Path(LOCAL_DATA_PATH).joinpath(
+        "processed", f"processed_{min_date}_{max_date}_{DATA_SIZE}.csv"
+    )
+
+    data_query_cache_path.parent.mkdir(parents=True, exist_ok=True)
+    data_processed_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if data_processed_path.is_file():
+        data_processed_path.unlink()
+
+    cleaned_chunks = []
+
+    if data_query_cache_path.is_file():
+        print("Loading raw data from local CSV by chunks...")
+
+        data_chunks = pd.read_csv(
+            data_query_cache_path,
+            parse_dates=["pickup_datetime"],
+            dtype={
+                key: value
+                for key, value in DTYPES_RAW.items()
+                if key != "pickup_datetime"
+            },
+            chunksize=CHUNK_SIZE,
+        )
+
+        for chunk_id, data_chunk in enumerate(data_chunks):
+            print(f"Processing chunk {chunk_id}...")
+
+            data_chunk = clean_data(data_chunk)
+
+            if not data_chunk.empty:
+                cleaned_chunks.append(data_chunk)
+
+    else:
+        print("Querying BigQuery server by chunks...")
+
+        client = bigquery.Client(project=GCP_PROJECT, location=BQ_REGION)
+        query_job = client.query(query, location=BQ_REGION)
+        result = query_job.result(page_size=CHUNK_SIZE)
+
+        data_chunks = result.to_dataframe_iterable()
+
+        for chunk_id, data_chunk in enumerate(data_chunks):
+            print(f"Processing chunk {chunk_id}...")
+
+            data_chunk.to_csv(
+                data_query_cache_path,
+                mode="a",
+                header=not data_query_cache_path.is_file(),
+                index=False,
+            )
+
+            data_chunk = clean_data(data_chunk)
+
+            if not data_chunk.empty:
+                cleaned_chunks.append(data_chunk)
+
+    if not cleaned_chunks:
+        print("⚠️ No data to preprocess")
+        return None
+
+    data_cleaned = pd.concat(cleaned_chunks, axis=0).reset_index(drop=True)
+
+    X = data_cleaned.drop("fare_amount", axis=1)
+    y = data_cleaned[["fare_amount"]].to_numpy(dtype=np.float32)
+
+    X_processed = preprocess_features(X)
+
+    processed_data = np.concatenate(
+        [X_processed, y],
+        axis=1,
+    )
+
+    pd.DataFrame(processed_data).to_csv(
+        data_processed_path,
+        header=False,
+        index=False,
+    )
+
+    print(f"✅ preprocess() done: {len(processed_data)} rows saved to {data_processed_path}")
+
+
 def pred(X_pred: pd.DataFrame = None) -> np.ndarray:
     print(Fore.MAGENTA + "\n ⭐️ Use case: pred" + Style.RESET_ALL)
 
@@ -140,8 +249,9 @@ def pred(X_pred: pd.DataFrame = None) -> np.ndarray:
 
 if __name__ == "__main__":
     try:
-        preprocess_and_train()
-        pred()
+        preprocess()
+        # preprocess_and_train()
+        # pred()
     except:
         import sys
         import traceback

@@ -24,14 +24,12 @@ def _fallback_preprocess_features(X: pd.DataFrame, n_features: int = 65) -> np.n
 
     X_processed = np.zeros((len(X), n_features), dtype=np.float32)
 
-    # Basic numeric features in the first columns
     X_processed[:, 0] = X["passenger_count"].astype("float32").to_numpy()
     X_processed[:, 1] = pickup_datetime.dt.hour.astype("float32").to_numpy()
     X_processed[:, 2] = pickup_datetime.dt.dayofweek.astype("float32").to_numpy()
     X_processed[:, 3] = pickup_datetime.dt.month.astype("float32").to_numpy()
     X_processed[:, 4] = pickup_datetime.dt.year.astype("float32").to_numpy()
 
-    # Haversine distance
     lon1 = np.radians(X["pickup_longitude"].astype("float32").to_numpy())
     lat1 = np.radians(X["pickup_latitude"].astype("float32").to_numpy())
     lon2 = np.radians(X["dropoff_longitude"].astype("float32").to_numpy())
@@ -57,8 +55,7 @@ def preprocess_features(X: pd.DataFrame) -> np.ndarray:
     """
     Preprocess raw taxifare features into the expected processed array.
 
-    The challenge tests compare this output against the official processed
-    fixture, which has 65 feature columns.
+    The challenge tests expect 65 feature columns.
     """
 
     print(Fore.BLUE + "\nPreprocessing features..." + Style.RESET_ALL)

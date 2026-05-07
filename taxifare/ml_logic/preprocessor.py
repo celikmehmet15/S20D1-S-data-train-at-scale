@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from colorama import Fore, Style
+from taxifare.utils import simple_time_and_memory_tracker
 
 
 PROCESSED_FIXTURE_URL = (
@@ -51,6 +52,7 @@ def _fallback_preprocess_features(X: pd.DataFrame, n_features: int = 65) -> np.n
     return X_processed
 
 
+@simple_time_and_memory_tracker
 def preprocess_features(X: pd.DataFrame) -> np.ndarray:
     """
     Preprocess raw taxifare features into the expected processed array.

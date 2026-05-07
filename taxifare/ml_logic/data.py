@@ -1,8 +1,10 @@
 import pandas as pd
 
 from colorama import Fore, Style
+from taxifare.utils import simple_time_and_memory_tracker
 
 
+@simple_time_and_memory_tracker
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean raw taxifare data by removing invalid fares, invalid passengers,

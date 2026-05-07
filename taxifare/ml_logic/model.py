@@ -1,4 +1,5 @@
 from colorama import Fore, Style
+from taxifare.utils import simple_time_and_memory_tracker
 
 from tensorflow.keras import Sequential, regularizers
 from tensorflow.keras.layers import Dense, Normalization, Input
@@ -43,6 +44,7 @@ def compile_model(model: Sequential, learning_rate: float = 0.0005) -> Sequentia
     return model
 
 
+@simple_time_and_memory_tracker
 def train_model(
     model: Sequential,
     X=None,
